@@ -33,6 +33,7 @@ import org.sensorhub.api.sensor.SensorDataEvent;
 import org.sensorhub.impl.sensor.AbstractSensorOutput;
 import org.vast.swe.SWEConstants;
 import org.vast.swe.SWEHelper;
+import org.vast.swe.helper.GeoPosHelper;
 
 
 public class AVLOutput extends AbstractSensorOutput<AVLDriver>
@@ -68,7 +69,7 @@ public class AVLOutput extends AbstractSensorOutput<AVLDriver>
     @Override
     protected void init()
     {
-        SWEHelper fac = new SWEHelper();
+        GeoPosHelper fac = new GeoPosHelper();
 
         // SWE Common data structure
         dataStruct = fac.newDataRecord(7);
@@ -87,8 +88,7 @@ public class AVLOutput extends AbstractSensorOutput<AVLDriver>
 
         // location (latitude-longitude)	        
         Vector locVector = fac.newLocationVectorLatLon(SWEConstants.DEF_SENSOR_LOC);
-        locVector.setLabel("Location");
-        locVector.setDescription("Latitude-Longitude location measured by GPS device");
+        locVector.setLabel("Vehicle Location");
         dataStruct.addComponent("location", locVector);
 
         // status constraints: (AQ - at-station; ER - enroute; AR - arrived?, OS - out-of-service, AK - completed-returning)
@@ -211,7 +211,6 @@ public class AVLOutput extends AbstractSensorOutput<AVLDriver>
     {
         if (sendData)
             return;
-
         sendData = true;
 
         // connect to data stream
@@ -231,16 +230,14 @@ public class AVLOutput extends AbstractSensorOutput<AVLDriver>
             public void run()
             {
                 while (sendData)
-                {
                     pollAndSendMeasurement();
-                }
             }
         });
         t.start();
     }
 
 
-    protected void stop()
+    protected synchronized void stop()
     {
         sendData = false;
 

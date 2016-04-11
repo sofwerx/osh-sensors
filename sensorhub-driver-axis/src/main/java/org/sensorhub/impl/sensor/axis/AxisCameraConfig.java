@@ -15,7 +15,13 @@ Developer are Copyright (C) 2014 the Initial Developer. All Rights Reserved.
 
 package org.sensorhub.impl.sensor.axis;
 
+import org.sensorhub.api.config.DisplayInfo;
 import org.sensorhub.api.sensor.SensorConfig;
+import org.sensorhub.impl.comm.HTTPConfig;
+import org.sensorhub.impl.sensor.rtpcam.RTSPConfig;
+import org.sensorhub.impl.sensor.videocam.BasicVideoConfig;
+import org.sensorhub.impl.sensor.videocam.VideoResolution;
+import org.sensorhub.impl.sensor.videocam.ptz.PtzConfig;
 
 
 /**
@@ -29,7 +35,76 @@ import org.sensorhub.api.sensor.SensorConfig;
  */
 public class AxisCameraConfig extends SensorConfig {
 	
-	public String ipAddress = "192.168.1.50";
-	//public String ipAddress = "192.168.0.60";
+    @DisplayInfo(label="Video", desc="Video settings")
+    public VideoConfig video = new VideoConfig();
+    
+    @DisplayInfo(label="Network", desc="Network configuration")
+    public HTTPConfig net = new HTTPConfig();
+    
+    @DisplayInfo(label="RTP/RTSP", desc="RTP/RTSP configuration")
+    public RTSPConfig rtsp = new RTSPConfig();
+    
+    @DisplayInfo(label="PTZ", desc="Pan-Tilt-Zoom configuration")
+    public PtzConfig ptz = new PtzConfig();
+    
+    @DisplayInfo(label="Enable H264", desc="Enable H264 encoded video output (accessible through RTSP)")
+    public boolean enableH264;
+    
+    @DisplayInfo(label="Enable MJPEG", desc="Enable MJPEG encoded video output (accessible through HTTP)")
+    public boolean enableMJPEG;
+    
+    
+	// TODO: Set variable for mounting (top up, top down, top sideways) or better set mounting angles relative to NED/ENU
+    // ALSO, use flip=yes/no to flip image if necessary	
+	
 
+    public class VideoConfig extends BasicVideoConfig
+    {
+        @DisplayInfo(desc="Resolution of video frames in pixels")
+        public ResolutionEnum resolution;        
+               
+        public VideoResolution getResolution()
+        {
+            return resolution;
+        }
+    }
+    
+    
+    public enum ResolutionEnum implements VideoResolution
+    {
+        VGA("VGA", 640, 480),
+        _4CIF("CIF", 704, 480),
+        _2CIF("CIF", 704, 240),
+        CIF("CIF", 352, 240),
+        QCIF("CIF", 176, 120),
+        D1_NTSC("D1", 720, 480),
+        D1_PAL("D1", 720, 576),
+        HD_720P("HD", 1280, 720),
+        SXGA("HD", 1280, 1024),
+        HD_1080P("Full HD", 1920, 1080);
+        
+        private String text;
+        private int width, height;
+        
+        private ResolutionEnum(String text, int width, int height)
+        {
+            this.text = text;
+            this.width = width;
+            this.height = height;
+        }
+        
+        public int getWidth() { return width; };
+        public int getHeight() { return height; };
+        public String toString() { return text + " (" + width + "x" + height + ")"; }
+    };
+    
+    
+    public AxisCameraConfig()
+    {
+        // default params for Axis
+        video.resolution = ResolutionEnum._4CIF;
+        rtsp.rtspPort = 554;
+        rtsp.videoPath = "/axis-media/media.amp?videocodec=h264";        
+        rtsp.localUdpPort = 20100;
+    }
 }

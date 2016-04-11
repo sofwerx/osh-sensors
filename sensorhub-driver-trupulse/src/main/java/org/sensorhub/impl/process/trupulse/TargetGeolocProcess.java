@@ -39,7 +39,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.vast.process.DataQueue;
 import org.vast.swe.SWEConstants;
-import org.vast.swe.SWEHelper;
+import org.vast.swe.helper.GeoPosHelper;
 
 
 /**
@@ -96,7 +96,7 @@ public class TargetGeolocProcess extends AbstractStreamProcess<TargetGeolocConfi
         }
         
         // create inputs
-        SWEHelper fac = new SWEHelper();   
+        GeoPosHelper fac = new GeoPosHelper();   
         
         sensorLocInput = fac.newDataRecord();
         sensorLocInput.setName("sensorLocation");
