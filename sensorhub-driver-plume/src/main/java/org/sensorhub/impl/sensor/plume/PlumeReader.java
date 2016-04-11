@@ -41,7 +41,7 @@ import java.io.IOException;
  */
 public class PlumeReader 
 {
-	static final double START_TIME = 1441918699.;  // Actual start time doesn't seem to be in the model-
+	static final double START_TIME = 1450094400.;  // Actual start time doesn't seem to be in the model-
 												  //  Ask YuLing about this	
 	
 	// TODO: add support for multiple sources
@@ -120,7 +120,8 @@ public class PlumeReader
 	}
 
 	public static void main(String[] args) throws IOException {
-		File pfile = new File("C:/Data/sensorhub/plume/ppdm_ind_ms_v2/run/PARTICLE.OUT_p0");
+//		File pfile = new File("C:/Data/sensorhub/plume/ppdm_ind_ms_v2/run/PARTICLE.OUT_p0");
+		File pfile = new File("C:/Data/sensorhub/plume/20151214/PARTICLE.OUT_12Zrel_350m");
 		Plume plume = PlumeReader.read(pfile);
 		System.err.println(plume);
 	}
