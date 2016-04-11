@@ -49,7 +49,7 @@ public class TestPlumeDriver implements IEventListener
     {
         config = new PlumeConfig();
         config.id = UUID.randomUUID().toString();
-        config.dataPath = "/media/Data/Projects/Workspace_OGC/osh-sensors/sensorhub-driver-plume/PARTICLE.OUT_p0";
+        config.dataPath = "C:/Data/sensorhub/plume/20151214/PARTICLE.OUT_12Zrel_350m";
         
         driver = new PlumeSensor();
         driver.init(config);
