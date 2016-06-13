@@ -39,7 +39,6 @@ public class ActivityOutput extends AbstractSensorOutput<AngelSensor>
     }
 
 
-    @Override
     protected void init()
     {
         SWEHelper fac = new SWEHelper();
@@ -57,18 +56,6 @@ public class ActivityOutput extends AbstractSensorOutput<AngelSensor>
                 
         // also generate encoding definition as text block
         dataEnc = fac.newTextEncoding(",", "\n");        
-    }
-       
-
-    protected void start()
-    {
-        
-    }
-
-
-    protected void stop()
-    {
-        
     }
 
 

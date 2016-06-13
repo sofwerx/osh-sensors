@@ -18,6 +18,7 @@ import java.util.UUID;
 import net.opengis.sensorml.v20.AbstractProcess;
 import net.opengis.swe.v20.DataBlock;
 import net.opengis.swe.v20.DataComponent;
+import net.opengis.swe.v20.DataEncoding;
 import net.opengis.swe.v20.DataType;
 import org.junit.After;
 import org.junit.Before;
@@ -29,6 +30,7 @@ import org.sensorhub.api.sensor.ISensorDataInterface;
 import org.sensorhub.api.sensor.SensorDataEvent;
 import org.sensorhub.impl.sensor.v4l.V4LCameraDriver;
 import org.sensorhub.impl.sensor.v4l.V4LCameraConfig;
+import org.sensorhub.test.sensor.videocam.VideoTestHelper;
 import org.vast.data.DataValue;
 import org.vast.sensorML.SMLUtils;
 import org.vast.swe.SWEUtils;
@@ -37,9 +39,12 @@ import static org.junit.Assert.*;
 
 public class TestV4LCameraDriver implements IEventListener
 {
+    final static int MAX_FRAMES = 100;
     V4LCameraDriver driver;
     V4LCameraConfig config;
     int actualWidth, actualHeight;
+    int frameCount;
+    VideoTestHelper videoTestHelper = new VideoTestHelper();
     
     
     @Before
@@ -71,6 +76,9 @@ public class TestV4LCameraDriver implements IEventListener
         {
             DataComponent dataMsg = di.getRecordDescription();
             new SWEUtils(SWEUtils.V2_0).writeComponent(System.out, dataMsg, false, true);
+            
+            DataEncoding dataEnc = di.getRecommendedEncoding();
+            new SWEUtils(SWEUtils.V2_0).writeEncoding(System.out, dataEnc, true);
         }
     }
     
@@ -99,14 +107,16 @@ public class TestV4LCameraDriver implements IEventListener
     {
         // register listener on data interface
         ISensorDataInterface di = driver.getObservationOutputs().values().iterator().next();
+        assertTrue("No video output", di != null);
         di.registerListener(this);
+        videoTestHelper.initWindow(di);
+        startCapture();
         
         // start capture and wait until we receive the first frame
         synchronized (this)
         {
-            startCapture();
-            this.wait();
-            driver.stop();
+            while (frameCount < MAX_FRAMES)
+                this.wait();
         }
         
         assertTrue(actualWidth == config.defaultParams.imgWidth);
@@ -190,11 +200,14 @@ public class TestV4LCameraDriver implements IEventListener
         SensorDataEvent newDataEvent = (SensorDataEvent)e;
         DataComponent camDataStruct = newDataEvent.getSource().getRecordDescription();
         
-        actualWidth = camDataStruct.getComponent(0).getComponentCount();
-        actualHeight = camDataStruct.getComponentCount();
+        actualWidth = camDataStruct.getComponent(1).getComponent(0).getComponentCount();
+        actualHeight = camDataStruct.getComponent(1).getComponentCount();
         
-        System.out.println("New data received from sensor " + newDataEvent.getSensorID());
+        System.out.println("New frame received");
         System.out.println("Image is " + actualWidth + "x" + actualHeight);
+        
+        videoTestHelper.renderFrameJPEG(newDataEvent.getRecords()[0]);
+        frameCount++;
         
         synchronized (this) { this.notify(); }
     }
@@ -203,6 +216,9 @@ public class TestV4LCameraDriver implements IEventListener
     @After
     public void cleanup()
     {
-        driver.stop();
+        videoTestHelper.dispose();
+        
+        if (driver != null)
+            driver.stop();
     }
 }

@@ -52,7 +52,6 @@ public class AHRSOutput extends AbstractSensorOutput<AHRSSensor>
     	return "ahrsData";
     }
    
-    @Override
     protected void init()
     {
     	GeoPosHelper fac = new GeoPosHelper();
@@ -63,7 +62,7 @@ public class AHRSOutput extends AbstractSensorOutput<AHRSSensor>
 //    	imuData.setDefinition("http://sensorml.com/ont/swe/property/ImuData");
     	ahrsData.setDefinition("http://sensorml.com/ont/swe/property/ImuData");
 
-    	String localRefFrame = parentSensor.getCurrentDescription().getUniqueIdentifier() + "#" + AHRSSensor.CRS_ID;
+    	String localRefFrame = parentSensor.getUniqueIdentifier() + "#" + AHRSSensor.CRS_ID;
     	// time stamp
     	ahrsData.addComponent("time", fac.newTimeStampIsoUTC());
       

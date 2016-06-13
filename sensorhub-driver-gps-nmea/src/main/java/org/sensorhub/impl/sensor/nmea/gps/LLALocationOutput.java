@@ -63,7 +63,6 @@ public class LLALocationOutput extends NMEAGpsOutput
     }
 
     
-    @Override
     protected void init()
     {
         GeoPosHelper fac = new GeoPosHelper();
@@ -89,7 +88,7 @@ public class LLALocationOutput extends NMEAGpsOutput
         // init with system date if no GNSS message has been received for a while
         double now = System.currentTimeMillis() / 1000.;
         if (Double.isNaN(lastFixUtcDateTime) || (now - lastFixUtcDateTime) > 3600.0)
-            setLastFixUtcFateTime(now - 3600.);
+            setLastFixUtcDateTime(now - 3600.);
         
         // process different message types
         if (msgID.equals(NMEAGpsSensor.GGA_MSG))
@@ -99,7 +98,7 @@ public class LLALocationOutput extends NMEAGpsOutput
             // skip if position fix not available
             if (tokens[6].charAt(0) == '0')
             {
-                NMEAGpsSensor.log.debug("GGA: No position fix");
+                log.debug("GGA: No position fix");
                 return;
             }
             
@@ -124,7 +123,7 @@ public class LLALocationOutput extends NMEAGpsOutput
             // skip if data is marked as invalid
             if (tokens[2].charAt(0) != 'A')
             {
-                NMEAGpsSensor.log.debug("RMC: Invalid Data");
+                log.debug("RMC: Invalid Data");
                 return;
             }
             
@@ -151,7 +150,7 @@ public class LLALocationOutput extends NMEAGpsOutput
             // skip if data is marked as invalid
             if (tokens[6].charAt(0) != 'A')
             {
-                NMEAGpsSensor.log.debug("GLL: Invalid Data");
+                log.debug("GLL: Invalid Data");
                 return;
             }
             
@@ -175,7 +174,7 @@ public class LLALocationOutput extends NMEAGpsOutput
             
             // UTC date
             cal.set(Calendar.DAY_OF_MONTH, Integer.parseInt(tokens[2]));
-            cal.set(Calendar.MONTH, Integer.parseInt(tokens[3]));
+            cal.set(Calendar.MONTH, Integer.parseInt(tokens[3])-1);
             cal.set(Calendar.YEAR, Integer.parseInt(tokens[4]));
             
             // UTC time
@@ -187,7 +186,7 @@ public class LLALocationOutput extends NMEAGpsOutput
             double subSeconds = seconds - Math.floor(seconds);
             cal.set(Calendar.MILLISECOND, (int)(subSeconds*1000));
             
-            setLastFixUtcFateTime(cal.getTimeInMillis() / 1000.0);         
+            setLastFixUtcDateTime(cal.getTimeInMillis() / 1000.0);         
         }
         
         if (dataBlock != null)
@@ -211,7 +210,7 @@ public class LLALocationOutput extends NMEAGpsOutput
             fixDateTime += SECONDS_PER_DAY;
         
         lastFixUtcTimeValue = Double.parseDouble(utcTime);
-        return setLastFixUtcFateTime(fixDateTime);
+        return setLastFixUtcDateTime(fixDateTime);
     }
     
     
@@ -219,7 +218,7 @@ public class LLALocationOutput extends NMEAGpsOutput
     {
         // UTC date
         cal.set(Calendar.DAY_OF_MONTH, Integer.parseInt(utcDate.substring(0, 2)));
-        cal.set(Calendar.MONTH, Integer.parseInt(utcDate.substring(2, 4)));
+        cal.set(Calendar.MONTH, Integer.parseInt(utcDate.substring(2, 4))-1);
         cal.set(Calendar.YEAR, 2000 + Integer.parseInt(utcDate.substring(4, 6)));
         
         // UTC time
@@ -231,7 +230,7 @@ public class LLALocationOutput extends NMEAGpsOutput
         cal.set(Calendar.MILLISECOND, (int)(subSeconds*1000));
         
         lastFixUtcTimeValue = Double.parseDouble(utcTime);
-        return setLastFixUtcFateTime(cal.getTimeInMillis() / 1000.0);
+        return setLastFixUtcDateTime(cal.getTimeInMillis() / 1000.0);
     }
     
     
@@ -254,13 +253,16 @@ public class LLALocationOutput extends NMEAGpsOutput
     }
     
     
-    protected double setLastFixUtcFateTime(double fixDateTime)
+    protected double setLastFixUtcDateTime(double fixDateTime)
     {
+        // log date of first fix or all
+        if (Double.isNaN(lastFixUtcDateTime))
+            log.info("First GPS Fix on {}", new DateTimeFormat().formatIso(fixDateTime, 0));
+        else if (log.isDebugEnabled())
+            log.debug("GPS Fix on {}", new DateTimeFormat().formatIso(fixDateTime, 0));
+        
         lastFixUtcDateTime = fixDateTime;
         parentSensor.lastFixUtcTime = lastFixUtcDateTime;
-        
-        if (NMEAGpsSensor.log.isDebugEnabled()) 
-            NMEAGpsSensor.log.debug("UTC Date/Time is {}", new DateTimeFormat().formatIso(fixDateTime, 0));
         
         return fixDateTime;
     }
