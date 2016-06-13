@@ -18,6 +18,7 @@ import org.sensorhub.api.common.SensorHubException;
 import org.sensorhub.api.sensor.SensorException;
 import org.sensorhub.impl.sensor.AbstractSensorModule;
 import au.edu.jcu.v4l4j.DeviceInfo;
+import au.edu.jcu.v4l4j.ImageFormat;
 import au.edu.jcu.v4l4j.VideoDevice;
 import au.edu.jcu.v4l4j.exceptions.V4L4JException;
 
@@ -43,9 +44,17 @@ public class V4LCameraDriver extends AbstractSensorModule<V4LCameraConfig>
     
     static
     {
-        // preload libvideo so it is extracted from JAR
-        System.loadLibrary("video");
+        try
+        {
+            // preload libvideo so it is extracted from JAR
+            System.loadLibrary("video");
+        }
+        catch (Exception e)
+        {
+            e.printStackTrace();
+        }
     }
+    
     
     public V4LCameraDriver()
     {
@@ -58,7 +67,18 @@ public class V4LCameraDriver extends AbstractSensorModule<V4LCameraConfig>
     {
         super.init(config);
         
-        this.dataInterface = new V4LCameraOutput(this);
+        // generate identifiers: use serial number from config or first characters of local ID
+        String sensorID = config.serialNumber;
+        if (sensorID == null)
+        {
+            int endIndex = Math.min(config.id.length(), 8);
+            sensorID = config.id.substring(0, endIndex);
+        }
+        this.xmlID = "V4L_CAMERA_" + sensorID.toUpperCase();
+        this.uniqueID = "urn:osh:v4l-cam:" + sensorID;
+        
+        // create data and control interfaces
+        this.dataInterface = new V4LCameraOutputRGB(this);
         this.controlInterface = new V4LCameraControl(this);
     }
 
@@ -92,9 +112,19 @@ public class V4LCameraDriver extends AbstractSensorModule<V4LCameraConfig>
             throw new SensorException("Cannot initialize video device " + config.deviceName, e);
         }
         
-        // init data and control interfaces
+        // init vide outputs
+        for (ImageFormat fmt: deviceInfo.getFormatList().getNativeFormats())
+        {
+            if ("MJPEG".equals(fmt.getName()))
+            {
+                getLogger().debug("Creating MJPEG output");
+                dataInterface = new V4LCameraOutputMJPEG(this, fmt);
+            }
+        }
         dataInterface.init();
         addOutput(dataInterface, false);
+        
+        // init control interfacess
         controlInterface.init();
         addControlInput(controlInterface);
     }
@@ -132,9 +162,6 @@ public class V4LCameraDriver extends AbstractSensorModule<V4LCameraConfig>
         synchronized (sensorDescription)
         {
             super.updateSensorDescription();
-            
-            if (AbstractSensorModule.DEFAULT_ID.equals(sensorDescription.getId()))
-                sensorDescription.setId("V4L_CAMERA");
             
             if (!sensorDescription.isSetDescription())
                 sensorDescription.setDescription("Video4Linux camera on port " + videoDevice.getDevicefile());

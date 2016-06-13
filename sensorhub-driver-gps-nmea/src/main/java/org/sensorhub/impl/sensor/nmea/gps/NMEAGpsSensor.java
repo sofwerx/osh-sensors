@@ -24,8 +24,6 @@ import org.sensorhub.api.comm.ICommProvider;
 import org.sensorhub.api.common.SensorHubException;
 import org.sensorhub.api.sensor.ISensorDataInterface;
 import org.sensorhub.impl.sensor.AbstractSensorModule;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 
 /**
@@ -38,8 +36,6 @@ import org.slf4j.LoggerFactory;
  */
 public class NMEAGpsSensor extends AbstractSensorModule<NMEAGpsConfig>
 {
-    static final Logger log = LoggerFactory.getLogger(NMEAGpsSensor.class);
-    
     public static final String GLL_MSG = "GLL";
     public static final String GGA_MSG = "GGA";
     public static final String GSA_MSG = "GSA";
@@ -65,6 +61,16 @@ public class NMEAGpsSensor extends AbstractSensorModule<NMEAGpsConfig>
     {
         super.init(config);
         
+        // generate identifiers: use serial number from config or first characters of local ID
+        String sensorID = config.serialNumber;
+        if (sensorID == null)
+        {
+            int endIndex = Math.min(config.id.length(), 8);
+            sensorID = config.id.substring(0, endIndex);
+        } 
+        this.xmlID = "GPS_SENSOR_" + sensorID.toUpperCase();
+        this.uniqueID = "urn:osh:nmea-gps:" + sensorID;
+        
         // create outputs depending on selected sentences
         if (config.activeSentences.contains(GLL_MSG) ||
             config.activeSentences.contains(GGA_MSG))
@@ -77,7 +83,7 @@ public class NMEAGpsSensor extends AbstractSensorModule<NMEAGpsConfig>
         if (config.activeSentences.contains(GSA_MSG))
         {
             GPSQualityOutput dataInterface = new GPSQualityOutput(this);
-            addOutput(dataInterface, false);
+            addOutput(dataInterface, true);
             dataInterface.init();
         }
         
@@ -97,8 +103,9 @@ public class NMEAGpsSensor extends AbstractSensorModule<NMEAGpsConfig>
         synchronized (sensorDescription)
         {
             super.updateSensorDescription();
-            sensorDescription.setId("GPS_SENSOR");
-            sensorDescription.setDescription("NMEA 0183 Compatible GNSS Receiver");
+           
+            if (!sensorDescription.isSetDescription())
+                sensorDescription.setDescription("NMEA 0183 compatible GNSS receiver");
         }
     }
 
@@ -107,8 +114,8 @@ public class NMEAGpsSensor extends AbstractSensorModule<NMEAGpsConfig>
     public void start() throws SensorHubException
     {
         if (started)
-            return;        
-                
+            return;
+        
         // init comm provider
         if (commProvider == null)
         {
@@ -132,7 +139,7 @@ public class NMEAGpsSensor extends AbstractSensorModule<NMEAGpsConfig>
         try
         {
             reader = new BufferedReader(new InputStreamReader(commProvider.getInputStream(), StandardCharsets.US_ASCII));
-            NMEAGpsSensor.log.debug("Connected to NMEA data stream");
+            getLogger().debug("Connected to NMEA data stream");
         }
         catch (IOException e)
         {
@@ -148,6 +155,8 @@ public class NMEAGpsSensor extends AbstractSensorModule<NMEAGpsConfig>
                 {
                     pollAndSendMeasurement();
                 }
+                
+                reader = null;
             }
         });
         
@@ -156,24 +165,26 @@ public class NMEAGpsSensor extends AbstractSensorModule<NMEAGpsConfig>
     }
     
     
-    private synchronized void pollAndSendMeasurement()
+    private void pollAndSendMeasurement()
     {
+        String msg = null;
+        
         try
         {
             // read next message
-            String msg = reader.readLine();
+            msg = reader.readLine();
             long msgTime = System.currentTimeMillis();
             
             // if null, it's EOF
             if (msg == null)
                 return;            
             
-            log.debug("Received message: {}", msg);
+            getLogger().debug("Received message: {}", msg);
             
             // discard messages not starting with $ or with wrong checksum
             if (msg.charAt(0) != '$' || !validateChecksum(msg))
             {
-                log.debug("Skipping invalid message");
+                getLogger().debug("Skipping invalid message");
                 return;
             }
             
@@ -198,6 +209,10 @@ public class NMEAGpsSensor extends AbstractSensorModule<NMEAGpsConfig>
         {
             throw new RuntimeException("Error while parsing NMEA stream", e);
         }
+        catch (Exception e)
+        {
+            throw new RuntimeException("Error while parsing NMEA message: " + msg, e);
+        }
     }
     
     
@@ -220,7 +235,7 @@ public class NMEAGpsSensor extends AbstractSensorModule<NMEAGpsConfig>
             // warn and return false if not equal
             if (checkSum != msgCheckSum)
             {
-                log.warn("Wrong checksum {} for message: {}", checkSum, msg);
+                getLogger().warn("Wrong checksum {} for message: {}", checkSum, msg);
                 return false;
             }
         }
@@ -238,7 +253,6 @@ public class NMEAGpsSensor extends AbstractSensorModule<NMEAGpsConfig>
         {
             try { reader.close(); }
             catch (IOException e) { }
-            reader = null;
         }
         
         if (commProvider != null)

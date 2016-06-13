@@ -34,7 +34,6 @@ public class VN200GpsOutput extends VN200AbstractOutput
     }
 
 
-    @Override
     protected void init()
     {
         GeoPosHelper fac = new GeoPosHelper();
@@ -43,7 +42,7 @@ public class VN200GpsOutput extends VN200AbstractOutput
         dataStruct = fac.newDataRecord(2);
         dataStruct.setName(getName());
         
-        String localRefFrame = parentSensor.getCurrentDescription().getUniqueIdentifier() + "#" + VN200Sensor.CRS_ID;
+        String localRefFrame = parentSensor.getUniqueIdentifier() + "#" + VN200Sensor.CRS_ID;
                         
         // time stamp
         dataStruct.addComponent("time", fac.newTimeStampIsoUTC());
