@@ -15,18 +15,17 @@ Copyright (C) 2012-2015 Sensia Software LLC. All Rights Reserved.
 package org.sensorhub.impl.sensor.virbxe;
 
 import java.io.BufferedReader;
-import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
-import java.net.URL;
 import net.opengis.sensorml.v20.IdentifierList;
-import net.opengis.sensorml.v20.PhysicalSystem;
-import net.opengis.sensorml.v20.SpatialFrame;
 import net.opengis.sensorml.v20.Term;
 import org.sensorhub.api.common.SensorHubException;
+import org.sensorhub.api.sensor.SensorException;
+import org.sensorhub.impl.comm.RobustHTTPConnection;
 import org.sensorhub.impl.security.ClientAuth;
 import org.sensorhub.impl.sensor.AbstractSensorModule;
+import org.sensorhub.impl.sensor.rtpcam.RTSPClient;
 import org.vast.sensorML.SMLFactory;
 import org.vast.swe.SWEHelper;
 import com.google.gson.Gson;
@@ -44,67 +43,159 @@ public class VirbXeDriver extends AbstractSensorModule<VirbXeConfig>
 {
     protected final static String CRS_ID = "SENSOR_FRAME";
         
-    // Navigation Data output
+    RobustHTTPConnection connection;
     VirbXeNavOutput navDataInterface;
-    
-    // Health Data Output
     VirbXeAntOutput healthDataInterface;
-    
-    // Video Data Output
     VirbXeVideoOutput videoDataInterface;
 	
     String hostUrl;    
-    String serialNumber = " ";
-    String firmware = " ";
-    String modelNumber = " ";
-   
-    boolean doInit = true;
-    long connectionRetryPeriod = 2000L;
+    String serialNumber;
+    String firmware;
+    String modelNumber;
     
     
     public VirbXeDriver()
-    {       
+    {
+    }
+    
+    
+    @Override
+    public void setConfiguration(final VirbXeConfig config)
+    {
+        super.setConfiguration(config);
+        
+        // use same config for HTTP and RTSP by default
+        if (config.rtsp.localAddress == null)
+            config.rtsp.localAddress = config.http.localAddress;
+        if (config.rtsp.remoteHost == null)
+            config.rtsp.remoteHost = config.http.remoteHost;
+        if (config.rtsp.user == null)
+            config.rtsp.user = config.http.user;
+        if (config.rtsp.password == null)
+            config.rtsp.password = config.http.password;
+        
+        // compute full host URL
+        hostUrl = "http://" + config.http.remoteHost + ":" + config.http.remotePort + "/virb";
+    };
+    
+    
+    @Override
+    public void init() throws SensorHubException
+    {
+        // reset internal state in case init() was already called
+        super.init();
+        videoDataInterface = null;
+        navDataInterface = null;
+        healthDataInterface = null;
+        
+        // create connection handler
+        this.connection = new RobustHTTPConnection(this, config.connection, "VIRB Camera")
+        {
+            public boolean tryConnect() throws Exception
+            {
+                // check connection to HTTP server
+                String json = sendCommand("{\"command\":\"deviceInfo\"}");
+                if (json == null)
+                    return false;
+                getLogger().trace(json);
+                
+                // parse JSON response to get device info
+                try
+                {
+                    // deserialize the DeviceInfoArray JSON Object
+                    Gson gson = new Gson();     
+                    DeviceInfoArray info = gson.fromJson(json, DeviceInfoArray.class);
+                            
+                    modelNumber = info.deviceInfo[0].model;
+                    serialNumber = info.deviceInfo[0].deviceId;
+                    firmware = info.deviceInfo[0].firmware;
+                }
+                catch (Exception e)
+                {
+                    throw new IOException("Cannot parse JSON response", e);
+                }
+                
+                // check that we actually read a serial number
+                if (serialNumber == null || serialNumber.trim().isEmpty())
+                    throw new IOException("Cannot read camera serial number");
+                
+                // also check connection to RTSP server
+                try
+                {
+                    RTSPClient rtspClient = new RTSPClient(
+                            config.rtsp.remoteHost,
+                            config.rtsp.remotePort,
+                            config.rtsp.videoPath,
+                            config.rtsp.user,
+                            config.rtsp.password,
+                            config.rtsp.localUdpPort,
+                            config.connection.connectTimeout);
+                    rtspClient.sendOptions();
+                    rtspClient.sendDescribe();
+                }
+                catch (IOException e)
+                {
+                    reportError("Cannot connect to RTSP server", e, true);
+                    return false;
+                }
+                
+                return true;
+            }
+        };
+        
+        // TODO we could check if camera info is in cache, in which case
+        // it's not necessary to connect to camera at this point
+        
+        // wait for valid connection to camera
+        connection.waitForConnection();
+        
+        // generate identifiers
+        generateUniqueID("urn:garmin:cam:", serialNumber);
+        generateXmlID("GARMIN_VIRB_XE_", serialNumber);
+        
+        // create I/O objects
+        // video output
+        videoDataInterface = new VirbXeVideoOutput(this);
+        videoDataInterface.init();
+        addOutput(videoDataInterface, false);
+
+        // navigation output
+        navDataInterface = new VirbXeNavOutput(this);
+        navDataInterface.init();
+        addOutput(navDataInterface, false);
+        
+        // health data output
+        healthDataInterface = new VirbXeAntOutput(this);
+        healthDataInterface.init();
+        if (healthDataInterface.hasSensors())
+            addOutput(healthDataInterface, false);
+        else
+            healthDataInterface = null; // set to null if no sensors are connected
     }
     
     
     @Override
     public void start() throws SensorHubException
     {
-        hostUrl = "http://" + config.net.remoteHost + ":" + config.net.remotePort + "/virb";        
-        
-        // check first if connected
-        if (waitForConnection(connectionRetryPeriod, config.connectTimeout))
-        {
-            // create output only the first time it is started
-            if (doInit)
-            {
-            	// video output
-                videoDataInterface = new VirbXeVideoOutput(this);
-                videoDataInterface.init();
-                addOutput(videoDataInterface, false);
-        
-                // create navigation data interface
-                navDataInterface = new VirbXeNavOutput(this);
-                navDataInterface.init();
-                addOutput(navDataInterface, false);
-                
-                // create health data interface
-                healthDataInterface = new VirbXeAntOutput(this);
-                healthDataInterface.init();
-                if (healthDataInterface.hasSensors())
-                	addOutput(healthDataInterface, false);
-                else
-                    healthDataInterface = null; // set to null if no sensors are connected
-                
-               doInit = false;
-            }
+        // wait for valid connection to camera
+        connection.waitForConnection();
             
-            // start output threads
-            videoDataInterface.start();
-            navDataInterface.start();            
-            if (healthDataInterface != null)
-            	healthDataInterface.start();
+        // enable GPS on and set units to metric
+        try
+        {
+            sendCommand("{\"command\":\"updateFeature\",\"feature\": \"gps\" ,\"value\": \"on\" }");
+            sendCommand("{\"command\":\"updateFeature\",\"feature\": \"units\" ,\"value\": \"Metric\" }");
         }
+        catch (IOException e)
+        {
+            throw new SensorException("Cannot send startup commands", e);
+        }
+        
+        // start output threads
+        videoDataInterface.start();
+        navDataInterface.start();            
+        if (healthDataInterface != null)
+        	healthDataInterface.start();
     }
 
 
@@ -116,8 +207,6 @@ public class VirbXeDriver extends AbstractSensorModule<VirbXeConfig>
             super.updateSensorDescription();
             
             SMLFactory smlFac = new SMLFactory();
-            sensorDescription.setId("Garmin_VIRB_XE_" + serialNumber);
-            sensorDescription.setUniqueIdentifier("urn:garmin:cam:" + serialNumber);
             sensorDescription.setDescription("Garmin VIRB-XE camera with GPS and Orientation" );            
             
             IdentifierList ident = smlFac.newIdentifierList();
@@ -152,7 +241,7 @@ public class VirbXeDriver extends AbstractSensorModule<VirbXeConfig>
             term = smlFac.newTerm();
             term.setDefinition(SWEHelper.getPropertyUri("LongName"));
             term.setLabel("Long Name");
-            term.setValue("Garmin " + modelNumber + " Video Camera");
+            term.setValue("Garmin " + modelNumber + " Video Camera #" + serialNumber);
             ident.addIdentifier2(term);
         
             // Short Name
@@ -161,15 +250,6 @@ public class VirbXeDriver extends AbstractSensorModule<VirbXeConfig>
             term.setLabel("Short Name");
             term.setValue("Garmin " + modelNumber);
             ident.addIdentifier2(term);
-            
-            // TODO check this frame
-            SpatialFrame localRefFrame = smlFac.newSpatialFrame();
-            localRefFrame.setId(CRS_ID);
-            localRefFrame.setOrigin("Position of Accelerometers (as marked on the plastic box of the device)");
-            localRefFrame.addAxis("X", "The X axis is in the plane of the aluminum mounting plate, parallel to the serial connector (as marked on the plastic box of the device)");
-            localRefFrame.addAxis("Y", "The Y axis is in the plane of the aluminum mounting plate, orthogonal to the serial connector (as marked on the plastic box of the device)");
-            localRefFrame.addAxis("Z", "The Z axis is orthogonal to the aluminum mounting plate, so that the frame is direct (as marked on the plastic box of the device)");
-            ((PhysicalSystem)sensorDescription).addLocalReferenceFrame(localRefFrame);
         }
     }
 
@@ -177,69 +257,38 @@ public class VirbXeDriver extends AbstractSensorModule<VirbXeConfig>
     @Override
     public boolean isConnected()
     {
-    	try
-        {
-            // Check connection to VIRB and get DeviceInfo
-            // request JSON response, parse, and assign values
-            String json = sendCommand("{\"command\":\"deviceInfo\"}");
-            getLogger().trace(json);
-            if (json.equalsIgnoreCase("0"))
-            	return false;
-            
-            // Returns an array with one component
-            // serialize the DeviceInfo JSON Object
-            Gson gson = new Gson(); 	
-            DeviceInfoArray info = gson.fromJson(json, DeviceInfoArray.class);
-              		
-            modelNumber = info.deviceInfo[0].model;
-            serialNumber = info.deviceInfo[0].deviceId;
-            firmware = info.deviceInfo[0].firmware;
-            
-            // set GPS on and set Units to metric
-            //String response = 
-            sendCommand("{\"command\":\"updateFeature\",\"feature\": \"gps\" ,\"value\": \"on\" }");
-            //String response = 
-            sendCommand("{\"command\":\"updateFeature\",\"feature\": \"units\" ,\"value\": \"Metric\" }");
-            
-            return true;
-        }
-        catch (IOException e)
-        {
-            return false;
-        }
+        return connection.isConnected();
     }
     
     
-    // send Post command
+    // send POST command
     public String sendCommand(String command) throws IOException
     {
-    	URL obj = new URL(getHostUrl());
-        HttpURLConnection con = (HttpURLConnection) obj.openConnection();           
-        con.setRequestMethod("POST");
-        con.setConnectTimeout(5000);
-
-        con.setDoOutput(true);
-        DataOutputStream wr = new DataOutputStream(con.getOutputStream());
-        wr.writeBytes(command);
-        wr.flush();
-        wr.close();
-
-        // check response code for an error
-        String responseCode = Integer.toString(con.getResponseCode());
-        if ((responseCode.equalsIgnoreCase("-1")) || (responseCode.equalsIgnoreCase("401")))
-            return "0";
+    	// send POST data to URL
+        HttpURLConnection conn = connection.tryConnectPOST(getHostUrl(), command);
+        if (conn == null)
+            return null; // case where error reported but no exception
         
-        // read JSON response
-        BufferedReader in = new BufferedReader(new InputStreamReader(con.getInputStream()));
-        StringBuffer response = new StringBuffer();
-        String inputLine;
-        
-        while ((inputLine = in.readLine()) != null)
-            response.append(inputLine);
-        
-        in.close();
-    	
-    	return response.toString();
+        // read response
+        BufferedReader reader = null;
+        try
+        {    
+            reader = new BufferedReader(new InputStreamReader(conn.getInputStream()));
+            StringBuffer response = new StringBuffer();
+            String inputLine;            
+            while ((inputLine = reader.readLine()) != null)
+                response.append(inputLine);
+            return response.toString();
+        }
+        catch (IOException e)
+        {
+            throw new IOException("Cannot read server response", e);
+        }
+        finally
+        {
+            if (reader != null)
+                reader.close();
+        }
     }
    
     
@@ -258,17 +307,13 @@ public class VirbXeDriver extends AbstractSensorModule<VirbXeConfig>
 	   DeviceInfo[] deviceInfo;
     }
 
-    
-    @Override
-    protected void restartOnDisconnect()
-    {
-        super.restartOnDisconnect();
-    }
-
 
     @Override
     public void stop() throws SensorHubException
     {
+        if (connection != null)
+            connection.cancel();
+        
         if (videoDataInterface != null)
             videoDataInterface.stop();
         
@@ -289,9 +334,9 @@ public class VirbXeDriver extends AbstractSensorModule<VirbXeConfig>
     
     private void setAuth()
     {
-        ClientAuth.getInstance().setUser(config.net.user);
-        if (config.net.password != null)
-            ClientAuth.getInstance().setPassword(config.net.password.toCharArray());
+        ClientAuth.getInstance().setUser(config.http.user);
+        if (config.http.password != null)
+            ClientAuth.getInstance().setPassword(config.http.password.toCharArray());
     }
 
 

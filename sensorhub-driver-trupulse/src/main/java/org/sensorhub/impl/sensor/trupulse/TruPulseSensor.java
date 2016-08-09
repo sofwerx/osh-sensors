@@ -15,7 +15,6 @@ Developer are Copyright (C) 2014 the Initial Developer. All Rights Reserved.
 
 package org.sensorhub.impl.sensor.trupulse;
 
-import org.sensorhub.api.comm.CommConfig;
 import org.sensorhub.api.comm.ICommProvider;
 import org.sensorhub.api.common.SensorHubException;
 import org.sensorhub.impl.sensor.AbstractSensorModule;
@@ -39,7 +38,7 @@ public class TruPulseSensor extends AbstractSensorModule<TruPulseConfig>
 {
     static final Logger log = LoggerFactory.getLogger(TruPulseSensor.class);
     
-    ICommProvider<? super CommConfig> commProvider;
+    ICommProvider<?> commProvider;
     TruPulseOutput dataInterface;
     
     
@@ -49,9 +48,13 @@ public class TruPulseSensor extends AbstractSensorModule<TruPulseConfig>
     
     
     @Override
-    public void init(TruPulseConfig config) throws SensorHubException
+    public void init() throws SensorHubException
     {
-        super.init(config);
+        super.init();
+        
+        // generate identifiers: use serial number from config or first characters of local ID
+        generateUniqueID("urn:lasertech:trupulse360:", config.serialNumber);
+        generateXmlID("TRUPULSE_", config.serialNumber);
         
         // init main data interface
         dataInterface = new TruPulseOutput(this);
@@ -66,8 +69,6 @@ public class TruPulseSensor extends AbstractSensorModule<TruPulseConfig>
         synchronized (sensorDescription)
         {
             super.updateSensorDescription();
-            sensorDescription.setId("TruPulse");
-            sensorDescription.setUniqueIdentifier("urn:test:sensors:trupulse360");
             sensorDescription.setDescription("Laser RangeFinder for determining distance, inclination, and azimuth");
         }
     }

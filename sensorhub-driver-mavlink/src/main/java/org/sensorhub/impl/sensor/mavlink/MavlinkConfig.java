@@ -14,9 +14,8 @@ Copyright (C) 2012-2015 Sensia Software LLC. All Rights Reserved.
 
 package org.sensorhub.impl.sensor.mavlink;
 
-import java.util.ArrayList;
-import java.util.List;
-import org.sensorhub.api.comm.CommConfig;
+import java.util.EnumSet;
+import org.sensorhub.api.comm.CommProviderConfig;
 import org.sensorhub.api.config.DisplayInfo;
 import org.sensorhub.api.sensor.SensorConfig;
 
@@ -37,22 +36,36 @@ public class MavlinkConfig extends SensorConfig
     
     public enum CmdTypes
     {
-        MOUNT_CONFIGURE,
+        TAKEOFF,
+        GOTO_LLA,
+        GOTO_ENU,
+        VELOCITY,
+        HEADING,
+        LOITER,
+        ORBIT,
+        RTL,
+        LAND,
+        
         MOUNT_CONTROL,
-        NAV_WAYPOINT,
-        NAV_RETURN_TO_LAUNCH,
+        MOUNT_TARGET,
     }
     
     
     @DisplayInfo(label="Vehicle ID", desc="ID of vehicle sending the MAVLink stream (e.g. serial number)")
     public String vehicleID;
+    
+    @DisplayInfo(desc="Maximum travel distance allowed from take-off point in meters (used to setup geofence)")
+    public float maxTravelDistance = 150f;
+    
+    @DisplayInfo(desc="Maximum altitude allowed in meters (used to setup geofence)")
+    public float maxAltitude = 50f;
         
     @DisplayInfo(desc="MAVLink messages to expose through this sensor interface")
-    public List<MsgTypes> activeMessages = new ArrayList<MsgTypes>(3);
+    public EnumSet<MsgTypes> activeMessages = EnumSet.noneOf(MsgTypes.class);
     
     @DisplayInfo(desc="MAVLink commands to expose through this sensor interface")
-    public List<CmdTypes> activeCommands = new ArrayList<CmdTypes>(3);
+    public EnumSet<CmdTypes> activeCommands = EnumSet.noneOf(CmdTypes.class);
     
-    @DisplayInfo(desc="Communication settings to access MAVLink data")
-    public CommConfig commSettings;
+    @DisplayInfo(desc="Communication settings to connect to MAVLink data stream")
+    public CommProviderConfig<?> commSettings;
 }

@@ -18,7 +18,6 @@ import net.opengis.sensorml.v20.IdentifierList;
 import net.opengis.sensorml.v20.PhysicalSystem;
 import net.opengis.sensorml.v20.SpatialFrame;
 import net.opengis.sensorml.v20.Term;
-import org.sensorhub.api.comm.CommConfig;
 import org.sensorhub.api.comm.ICommProvider;
 import org.sensorhub.api.common.SensorHubException;
 import org.sensorhub.impl.sensor.AbstractSensorModule;
@@ -41,7 +40,7 @@ public class MtiSensor extends AbstractSensorModule<MtiConfig>
     static final Logger log = LoggerFactory.getLogger(MtiSensor.class);
     protected final static String CRS_ID = "SENSOR_FRAME";
         
-    ICommProvider<? super CommConfig> commProvider;
+    ICommProvider<?> commProvider;
     MtiOutput dataInterface;
     
     
@@ -51,10 +50,14 @@ public class MtiSensor extends AbstractSensorModule<MtiConfig>
 
 
     @Override
-    public void init(MtiConfig config) throws SensorHubException
+    public void init() throws SensorHubException
     {
-        super.init(config);
+        super.init();
         
+        // generate IDs
+        generateUniqueID("urn:xsens:imu:mti:", null);
+        generateXmlID("XSENS_IMU_", null);
+                
         // create main data interface
         dataInterface = new MtiOutput(this);
         addOutput(dataInterface, false);
@@ -70,7 +73,6 @@ public class MtiSensor extends AbstractSensorModule<MtiConfig>
             super.updateSensorDescription();
             
             SMLFactory smlFac = new SMLFactory();
-            sensorDescription.setId("XSens_MTi");
             sensorDescription.setDescription("XSens MTi Inertial Motion Unit");
             
             IdentifierList identifiers = smlFac.newIdentifierList();

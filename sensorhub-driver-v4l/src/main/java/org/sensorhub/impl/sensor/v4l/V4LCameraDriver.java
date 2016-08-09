@@ -63,36 +63,17 @@ public class V4LCameraDriver extends AbstractSensorModule<V4LCameraConfig>
     
     
     @Override
-    public void init(V4LCameraConfig config) throws SensorHubException
+    public void init() throws SensorHubException
     {
-        super.init(config);
+        super.init();
         
-        // generate identifiers: use serial number from config or first characters of local ID
-        String sensorID = config.serialNumber;
-        if (sensorID == null)
-        {
-            int endIndex = Math.min(config.id.length(), 8);
-            sensorID = config.id.substring(0, endIndex);
-        }
-        this.xmlID = "V4L_CAMERA_" + sensorID.toUpperCase();
-        this.uniqueID = "urn:osh:v4l-cam:" + sensorID;
+        // generate IDs
+        generateUniqueID("urn:osh:sensor:v4l-cam:", config.serialNumber);
+        generateXmlID("V4L_CAMERA_", config.serialNumber);
         
         // create data and control interfaces
         this.dataInterface = new V4LCameraOutputRGB(this);
         this.controlInterface = new V4LCameraControl(this);
-    }
-
-
-    @Override
-    public void updateConfig(V4LCameraConfig config) throws SensorHubException
-    {
-        // cleanup previously used device
-        stop();
-        init(config);
-        
-        // restart if enabled
-        if (config.autoStart)
-            start();
     }
     
     
@@ -112,7 +93,7 @@ public class V4LCameraDriver extends AbstractSensorModule<V4LCameraConfig>
             throw new SensorException("Cannot initialize video device " + config.deviceName, e);
         }
         
-        // init vide outputs
+        // init video output
         for (ImageFormat fmt: deviceInfo.getFormatList().getNativeFormats())
         {
             if ("MJPEG".equals(fmt.getName()))
@@ -172,16 +153,7 @@ public class V4LCameraDriver extends AbstractSensorModule<V4LCameraConfig>
     @Override
     public boolean isConnected()
     {
-        try
-        {
-            new VideoDevice(config.deviceName);            
-        }
-        catch (V4L4JException e)
-        {
-            return false;
-        }
-        
-        return true;
+        return (videoDevice != null);
     }
     
 
@@ -189,12 +161,5 @@ public class V4LCameraDriver extends AbstractSensorModule<V4LCameraConfig>
     public void cleanup()
     {
         
-    }
-    
-    
-    @Override
-    public void finalize()
-    {
-        stop();
     }
 }

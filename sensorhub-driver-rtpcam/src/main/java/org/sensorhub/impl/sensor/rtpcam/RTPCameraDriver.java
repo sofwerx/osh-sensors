@@ -15,7 +15,8 @@ Copyright (C) 2012-2015 Sensia Software LLC. All Rights Reserved.
 package org.sensorhub.impl.sensor.rtpcam;
 
 import org.sensorhub.api.common.SensorHubException;
-import org.sensorhub.api.sensor.SensorException;
+import org.sensorhub.impl.comm.RobustIPConnection;
+import org.sensorhub.impl.module.RobustConnection;
 import org.sensorhub.impl.sensor.AbstractSensorModule;
 
 
@@ -29,6 +30,7 @@ import org.sensorhub.impl.sensor.AbstractSensorModule;
  */
 public class RTPCameraDriver extends AbstractSensorModule<RTPCameraConfig>
 {
+    RobustConnection connection;
     RTPVideoOutput<RTPCameraDriver> dataInterface;
     
     
@@ -38,27 +40,52 @@ public class RTPCameraDriver extends AbstractSensorModule<RTPCameraConfig>
     
     
     @Override
-    public void init(RTPCameraConfig config) throws SensorHubException
+    public void init() throws SensorHubException
     {
-        super.init(config);        
-        this.dataInterface = new RTPVideoOutput<RTPCameraDriver>(this, config.video, config.net, config.rtsp);
-        this.dataInterface.init();
+        // reset internal state in case init() was already called
+        super.init();
+        dataInterface = null;
+        
+        // generate identifiers
+        generateUniqueID("urn:osh:sensor:rtpcam:", config.cameraID);
+        generateXmlID("RTP_CAM_", config.cameraID);
+        
+        // create connection handler
+        this.connection = new RobustIPConnection(this, config.connection, "RTP Camera")
+        {
+            public boolean tryConnect() throws Exception
+            {
+                // just check host is reachable on specified RTSP port
+                return tryConnectTCP(config.rtsp.remoteHost, config.rtsp.remotePort);
+            }
+        };
+        
+        // create video output
+        this.dataInterface = new RTPVideoOutput<RTPCameraDriver>(this);
+        this.dataInterface.init(config.video.frameWidth, config.video.frameHeight);
         addOutput(dataInterface, false);
     }
     
     
     @Override
-    public synchronized void start() throws SensorException
+    public synchronized void start() throws SensorHubException
     {
-        dataInterface.updateConfig(config.video, config.net, config.rtsp);
-        dataInterface.start();
+        // wait for valid connection to camera
+        connection.waitForConnection();
+        
+        // start video stream
+        dataInterface.start(config.video, config.rtsp, config.connection.connectTimeout);
     }
     
     
     @Override
     public synchronized void stop()
     {
-        dataInterface.stop();
+        if (connection != null)
+            connection.cancel();
+        
+        if (dataInterface != null)
+            dataInterface.stop();
     }
     
     

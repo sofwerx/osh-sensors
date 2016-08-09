@@ -78,7 +78,7 @@ public class RTSPClient
     }
     
     
-    public RTSPClient(String serverHost, int serverPort, String videoPath, String login, String passwd, int rtpRcvPort) throws IOException
+    public RTSPClient(String serverHost, int serverPort, String videoPath, String login, String passwd, int rtpRcvPort, int timeout) throws IOException
     {
         this.videoUrl = "rtsp://" + serverHost + ":" + serverPort + ((videoPath != null) ? videoPath : "");        
         this.userName = login;
@@ -86,8 +86,8 @@ public class RTSPClient
         
         InetAddress rtspServerIP = InetAddress.getByName(serverHost);
         this.rtspSocket = new Socket();
-        rtspSocket.connect(new InetSocketAddress(rtspServerIP, serverPort), 5000);
-        rtspSocket.setSoTimeout(5000); // read timeout
+        rtspSocket.connect(new InetSocketAddress(rtspServerIP, serverPort), timeout);
+        rtspSocket.setSoTimeout(timeout); // read timeout
         
         this.rtspResponseReader = new BufferedReader(new InputStreamReader(rtspSocket.getInputStream()));
         this.rtspRequestWriter = new BufferedWriter(new OutputStreamWriter(rtspSocket.getOutputStream()));
@@ -260,10 +260,15 @@ public class RTSPClient
             else
                 printResponse();
         }
-        catch (NumberFormatException | IOException e)
+        catch (IOException e)
         {
             connected = false;
             throw e;
+        }
+        catch (Exception e)
+        {
+            connected = false;
+            throw new IOException("Invalid " + reqType + " response", e);
         }
         
         connected = true;
@@ -409,5 +414,12 @@ public class RTSPClient
     public Collection<StreamInfo> getMediaStreams()
     {
         return mediaStreams;
+    }
+    
+    
+    public void close() throws IOException
+    {
+        if (rtspSocket != null && rtspSocket.isConnected())
+            rtspSocket.close();
     }
 }

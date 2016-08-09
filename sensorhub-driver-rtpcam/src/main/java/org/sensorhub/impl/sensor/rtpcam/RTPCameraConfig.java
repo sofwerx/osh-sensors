@@ -15,8 +15,12 @@ Copyright (C) 2012-2015 Sensia Software LLC. All Rights Reserved.
 package org.sensorhub.impl.sensor.rtpcam;
 
 import org.sensorhub.api.config.DisplayInfo;
+import org.sensorhub.api.config.DisplayInfo.Required;
+import org.sensorhub.api.sensor.PositionConfig;
 import org.sensorhub.api.sensor.SensorConfig;
-import org.sensorhub.impl.comm.TCPConfig;
+import org.sensorhub.api.sensor.PositionConfig.EulerOrientation;
+import org.sensorhub.api.sensor.PositionConfig.LLALocation;
+import org.sensorhub.impl.comm.RobustIPConnectionConfig;
 import org.sensorhub.impl.sensor.videocam.BasicVideoConfig;
 import org.sensorhub.impl.sensor.videocam.VideoResolution;
 
@@ -31,17 +35,21 @@ import org.sensorhub.impl.sensor.videocam.VideoResolution;
  */
 public class RTPCameraConfig extends SensorConfig
 {    
+    @Required
     @DisplayInfo(label="Camera ID", desc="Camera ID to be appended to UID prefix")
     public String cameraID;
+    
+    @DisplayInfo(label="RTP/RTSP", desc="RTP/RTSP configuration")
+    public RTSPConfig rtsp = new RTSPConfig();
+    
+    @DisplayInfo(label="Connection Options")
+    public RobustIPConnectionConfig connection = new RobustIPConnectionConfig();
     
     @DisplayInfo(label="Video", desc="Video settings")
     public VideoConfig video = new VideoConfig();
     
-    @DisplayInfo(label="Network", desc="Network configuration")
-    public TCPConfig net = new TCPConfig();
-    
-    @DisplayInfo(label="RTP/RTSP", desc="RTP/RTSP configuration")
-    public RTSPConfig rtsp = new RTSPConfig();
+    @DisplayInfo(desc="Camera geographic position")
+    public PositionConfig position = new PositionConfig();
     
     
     public class VideoConfig extends BasicVideoConfig
@@ -67,5 +75,19 @@ public class RTPCameraConfig extends SensorConfig
     {
         video.frameWidth = 1280;
         video.frameHeight = 720;
+    }
+    
+    
+    @Override
+    public LLALocation getLocation()
+    {
+        return position.location;
+    }
+    
+    
+    @Override
+    public EulerOrientation getOrientation()
+    {
+        return position.orientation;
     }
 }

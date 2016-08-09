@@ -15,7 +15,7 @@ Copyright (C) 2012-2015 Sensia Software LLC. All Rights Reserved.
 package org.sensorhub.test.sensor.mavlink;
 
 import java.io.IOException;
-import java.util.Arrays;
+import java.util.EnumSet;
 import java.util.UUID;
 import net.opengis.sensorml.v20.AbstractProcess;
 import net.opengis.swe.v20.DataComponent;
@@ -27,7 +27,7 @@ import org.sensorhub.api.common.IEventListener;
 import org.sensorhub.api.common.SensorHubException;
 import org.sensorhub.api.sensor.ISensorDataInterface;
 import org.sensorhub.api.sensor.SensorDataEvent;
-import org.sensorhub.impl.comm.UDPConfig;
+import org.sensorhub.impl.comm.UDPCommProviderConfig;
 import org.sensorhub.impl.sensor.mavlink.MavlinkConfig;
 import org.sensorhub.impl.sensor.mavlink.MavlinkConfig.MsgTypes;
 import org.sensorhub.impl.sensor.mavlink.MavlinkDriver;
@@ -51,15 +51,15 @@ public class TestMavlinkDriverSolo implements IEventListener
     {
         config = new MavlinkConfig();
         config.id = UUID.randomUUID().toString();
-        config.activeMessages = Arrays.asList(
+        config.activeMessages = EnumSet.of(
                 MsgTypes.GLOBAL_POSITION,
                 MsgTypes.ATTITUDE,
                 MsgTypes.GIMBAL_REPORT);
         
-        UDPConfig udpConf = new UDPConfig();
-        udpConf.localPort = 14550;
-        udpConf.remoteHost = "10.1.1.10";
-        udpConf.remotePort = 14560;
+        UDPCommProviderConfig udpConf = new UDPCommProviderConfig();
+        udpConf.protocol.localPort = 14550;
+        udpConf.protocol.remoteHost = "10.1.1.10";
+        udpConf.protocol.remotePort = 14560;
         config.commSettings = udpConf;
         
         driver = new MavlinkDriver();

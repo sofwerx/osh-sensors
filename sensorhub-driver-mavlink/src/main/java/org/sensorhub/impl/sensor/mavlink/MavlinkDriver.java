@@ -15,26 +15,27 @@ Copyright (C) 2012-2015 Sensia Software LLC. All Rights Reserved.
 package org.sensorhub.impl.sensor.mavlink;
 
 import java.io.BufferedInputStream;
+import java.io.BufferedOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.Timer;
-import org.sensorhub.api.comm.CommConfig;
 import org.sensorhub.api.comm.ICommProvider;
 import org.sensorhub.api.common.SensorHubException;
-import org.sensorhub.api.sensor.ISensorControlInterface;
 import org.sensorhub.api.sensor.ISensorDataInterface;
-import org.sensorhub.api.sensor.SensorEvent;
 import org.sensorhub.impl.sensor.AbstractSensorModule;
-import org.sensorhub.impl.sensor.mavlink.MavlinkConfig.CmdTypes;
 import org.sensorhub.impl.sensor.mavlink.MavlinkConfig.MsgTypes;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import com.MAVLink.MAVLinkPacket;
 import com.MAVLink.Parser;
 import com.MAVLink.Messages.MAVLinkMessage;
+import com.MAVLink.common.msg_command_ack;
+import com.MAVLink.common.msg_command_long;
 import com.MAVLink.common.msg_heartbeat;
 import com.MAVLink.common.msg_param_set;
+import com.MAVLink.common.msg_position_target_global_int;
+import com.MAVLink.common.msg_set_mode;
+import com.MAVLink.enums.MAV_CMD;
+import com.MAVLink.enums.MAV_MODE_FLAG;
 import com.MAVLink.enums.MAV_PARAM_TYPE;
 
 
@@ -50,13 +51,11 @@ import com.MAVLink.enums.MAV_PARAM_TYPE;
  */
 public class MavlinkDriver extends AbstractSensorModule<MavlinkConfig>
 {
-    static final Logger log = LoggerFactory.getLogger(MavlinkDriver.class);
-    
     protected static final String BODY_FRAME = "BODY_FRAME";
     protected static final String GIMBAL_FRAME = "GIMBAL_FRAME";
     protected static final long MAX_MSG_PERIOD = 10000L;
     
-    ICommProvider<? super CommConfig> commProvider;
+    ICommProvider<?> commProvider;
     Timer watchDogTimer;
     volatile boolean started;
     boolean connected;
@@ -67,10 +66,33 @@ public class MavlinkDriver extends AbstractSensorModule<MavlinkConfig>
     long lastMsgTime = 0;
     
     
-    @Override
-    public void init(MavlinkConfig config) throws SensorHubException
+    enum CopterModes
     {
-        super.init(config);
+        STABILIZE,
+        ACRO,
+        ALT_HOLD,
+        AUTO,
+        GUIDED,
+        LOITER,
+        RTL,
+        CIRCLE,
+        POSITION,
+        LAND,
+        OF_LOITER,
+        DRIFT,
+        SPORT,
+        FLIP,
+        AUTOTUNE,
+        POSHOLD
+    }
+    
+    
+    @Override
+    public void init() throws SensorHubException
+    {
+        // generate identifiers
+        generateUniqueID("urn:osh:sensor:mavlink:", config.vehicleID);
+        generateXmlID("MAVLINK_SYSTEM_", config.vehicleID);
         
         // create outputs depending on selected sentences
         if (config.activeMessages.contains(MsgTypes.GLOBAL_POSITION))
@@ -101,28 +123,24 @@ public class MavlinkDriver extends AbstractSensorModule<MavlinkConfig>
             dataInterface.init();
         }
         
+        if (config.activeMessages.contains(MsgTypes.BATTERY_STATUS))
+        {
+            BatteryStatusOutput dataInterface = new BatteryStatusOutput(this);
+            addOutput(dataInterface, true);
+            dataInterface.init();
+        }
+        
         // create control inputs depending on selected commands
-        if (config.activeCommands.contains(CmdTypes.MOUNT_CONTROL))
-        {
-            ISensorControlInterface controlInterface = null;
-            this.addControlInput(controlInterface);
-        }
-    }
-    
-    
-    @Override
-    protected void updateSensorDescription()
-    {
-        synchronized (sensorDescription)
-        {
-            super.updateSensorDescription();
-            
-            if (AbstractSensorModule.DEFAULT_ID.equals(sensorDescription.getId()))
-                sensorDescription.setId("MAVLINK_SYSTEM");
-            
-            if (config.vehicleID != null)
-                sensorDescription.setUniqueIdentifier("urn:osh:sensor:mavlink:" + config.vehicleID);
-        }
+        // only add the control input objects if some commands were enabled
+        MavlinkNavControl navControl = new MavlinkNavControl(this);
+        navControl.init();
+        if (navControl.commandData.getNumItems() > 0)
+            addControlInput(navControl);
+        
+        MavlinkCameraControl camControl = new MavlinkCameraControl(this);
+        camControl.init();
+        if (camControl.commandData.getNumItems() > 0)
+            addControlInput(camControl);
     }
 
 
@@ -156,7 +174,7 @@ public class MavlinkDriver extends AbstractSensorModule<MavlinkConfig>
         {
             mavlinkParser = new Parser();
             msgIn = new BufferedInputStream(commProvider.getInputStream());
-            cmdOut = commProvider.getOutputStream();
+            cmdOut = new BufferedOutputStream(commProvider.getOutputStream());
             
             // send heartbeat
             msg_heartbeat hb = new msg_heartbeat();
@@ -171,8 +189,12 @@ public class MavlinkDriver extends AbstractSensorModule<MavlinkConfig>
         try
         {         
             setTelemetryRates();
+            setGeofenceParams();
+            setDefaultNavParams();
+            getLogger().info("Switching to GUIDED mode");
+            setMode(CopterModes.GUIDED.ordinal());
         }
-        catch (IOException e)
+        catch (Exception e)
         {
             throw new RuntimeException("Error while setting UAV parameters ", e);
         }
@@ -197,45 +219,89 @@ public class MavlinkDriver extends AbstractSensorModule<MavlinkConfig>
     
     private void setTelemetryRates() throws IOException
     {
-        // set telemetry update rate
-        log.debug("Setting telemetry rate");
+        getLogger().info("Setting Telemetry Update Rate");
+        setParam("SR1_RAW_SENS", 0);
+        setParam("SR1_EXT_STAT", 0);
+        setParam("SR1_RC_CHAN", 0);
+        setParam("SR1_RAW_CTRL", 0);
+        setParam("SR1_POSITION", 10);
+        setParam("SR1_EXTRA1", 10);
+        setParam("SR1_EXTRA2", 0);
+        setParam("SR1_EXTRA3", 10);
+    }
+    
+    
+    private void setDefaultNavParams() throws IOException
+    {
+        getLogger().info("Setting Navigation Parameters");
+        setParam("WPNAV_RADIUS", 100);
+        setParam("CIRCLE_RADIUS", 2000);
+        setParam("CIRCLE_RATE", 5);
+    }
+    
+    
+    private void setGeofenceParams() throws IOException
+    {
+        getLogger().info("Setting Geofencing Parameters");
+        setParam("FENCE_TYPE", 3);
+        setParam("FENCE_ALT_MAX", config.maxAltitude);
+        setParam("FENCE_RADIUS", config.maxTravelDistance);
+        setParam("FENCE_MARGIN", 2f);
+        setParam("FENCE_ENABLE", 1);
+    }
+    
+    
+    protected void setParam(String name, float value) throws IOException
+    {
         msg_param_set setParam = new msg_param_set();
         setParam.target_system = 1;
         setParam.target_component = 1;
         setParam.param_type = MAV_PARAM_TYPE.MAV_PARAM_TYPE_REAL32;
-        
-        setParam.setParam_Id("SR1_RAW_SENS");
-        setParam.param_value = 0;
+        setParam.setParam_Id(name);
+        setParam.param_value = value;
         sendCommand(setParam.pack());
+    }
+    
+    
+    protected void setMode(int mode) throws IOException
+    {
+        // this command typeis not implemented by ArduCopter although the docs say it is...
+        /*msg_command_long cmd = new msg_command_long();
+        cmd.target_system = 1;
+        cmd.target_component = 1;
+        cmd.command = MAV_CMD.MAV_CMD_DO_SET_MODE;
+        cmd.param1 = (float)mode;
+        sendCommand(cmd.pack()); */
         
-        setParam.setParam_Id("SR1_EXT_STAT");
-        setParam.param_value = 0;
-        sendCommand(setParam.pack());
-        
-        setParam.setParam_Id("SR1_RC_CHAN");
-        setParam.param_value = 0;
-        sendCommand(setParam.pack());
-        
-        setParam.setParam_Id("SR1_RAW_CTRL");
-        setParam.param_value = 0;
-        sendCommand(setParam.pack());
-        
-        setParam.setParam_Id("SR1_EXTRA2");
-        setParam.param_value = 0;
-        sendCommand(setParam.pack());
-        
-        setParam.setParam_Id("SR1_EXTRA3");
-        setParam.param_value = 10;
-        sendCommand(setParam.pack());
-        
-        setParam.setParam_Id("SR1_POSITION");
-        setParam.param_value = 10;
-        sendCommand(setParam.pack());
-        
-        setParam.setParam_Id("SR1_EXTRA1");
-        setParam.param_value = 10;
-        sendCommand(setParam.pack());
-        
+        msg_set_mode cmd = new msg_set_mode();
+        cmd.target_system = 1;
+        cmd.base_mode = MAV_MODE_FLAG.MAV_MODE_FLAG_CUSTOM_MODE_ENABLED;
+        cmd.custom_mode = mode;
+        sendCommand(cmd.pack());
+    }
+    
+    
+    protected void armMotors() throws IOException
+    {
+        msg_command_long cmd = new msg_command_long();
+        cmd.target_system = 1;
+        cmd.target_component = 1;
+        cmd.command = MAV_CMD.MAV_CMD_COMPONENT_ARM_DISARM; // working but need gps fix and other prearm checks
+        cmd.param1 = 1;
+        sendCommand(cmd.pack());
+    }
+    
+    
+    protected void sendCommand(MAVLinkPacket pkt) throws IOException
+    {
+        synchronized (cmdOut)
+        {
+            pkt.generateCRC();
+            byte[] cmdData = pkt.encodePacket();
+            cmdOut.write(cmdData);
+            cmdOut.flush();
+            getLogger().trace("MAVLink command sent: " + pkt.msgid);
+        }
     }
     
     
@@ -251,9 +317,7 @@ public class MavlinkDriver extends AbstractSensorModule<MavlinkConfig>
                             if (connected)
                             {
                                 connected = false;
-                                SensorEvent e = new SensorEvent(now, MavlinkDriver.this, SensorEvent.Type.DISCONNECTED);
-                                log.info("Disconnected from remote MAVLink system");
-                                eventHandler.publishEvent(e);
+                                notifyConnectionStatus(false, "MAVLink system");
                             }
                         }
                         
@@ -296,14 +360,15 @@ public class MavlinkDriver extends AbstractSensorModule<MavlinkConfig>
             if (!connected)
             {
                 connected = true;
-                SensorEvent e = new SensorEvent(lastMsgTime, MavlinkDriver.this, SensorEvent.Type.CONNECTED);
-                log.info("Connected to remote MAVLink system");
-                eventHandler.publishEvent(e);
+                notifyConnectionStatus(true, "MAVLink system");
             }
             
             // unpack and log message
             MAVLinkMessage msg = packet.unpack();
-            log.trace("Received message {} from {}:{}", msg, msg.sysid, msg.compid);
+            if (msg instanceof msg_command_ack || msg instanceof msg_position_target_global_int)
+                getLogger().info("Received {}", msg);
+            else
+                getLogger().trace("Received message {} ({}) from {}:{}", msg, msg.getClass().getName(), msg.sysid, msg.compid);
             
             // special case for system time message
             /*if (msg instanceof msg_system_time)
@@ -332,16 +397,6 @@ public class MavlinkDriver extends AbstractSensorModule<MavlinkConfig>
         // just use receiving time stamp for now
         // TODO use sender time stamp for better relative timing accuracy
         return ((double)lastMsgTime) / 1000.;
-    }
-    
-    
-    protected void sendCommand(MAVLinkPacket pkt) throws IOException
-    {
-        pkt.generateCRC();
-        byte[] cmdData = pkt.encodePacket();
-        cmdOut.write(cmdData);
-        cmdOut.flush();
-        log.trace("MAVLink command sent: " + pkt.msgid);
     }
 
 

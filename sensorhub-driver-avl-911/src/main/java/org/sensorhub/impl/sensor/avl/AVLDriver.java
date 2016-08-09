@@ -23,7 +23,6 @@ import java.util.Set;
 import net.opengis.gml.v32.AbstractFeature;
 import net.opengis.sensorml.v20.AbstractProcess;
 import net.opengis.sensorml.v20.PhysicalSystem;
-import org.sensorhub.api.comm.CommConfig;
 import org.sensorhub.api.comm.ICommProvider;
 import org.sensorhub.api.common.SensorHubException;
 import org.sensorhub.api.data.FoiEvent;
@@ -48,12 +47,12 @@ public class AVLDriver extends AbstractSensorModule<AVLConfig> implements IMulti
 {
 	static final Logger log = LoggerFactory.getLogger(AVLDriver.class);
 
-	static final String SENSOR_UID_PREFIX = "urn:osh:sensors:avl:";
+	static final String SENSOR_UID_PREFIX = "urn:osh:sensor:avl:";
     
     Set<String> foiIDs;
     Map<String, AbstractFeature> vehicleFois;
     	
-	ICommProvider<? super CommConfig> commProvider;
+	ICommProvider<?> commProvider;
     AVLOutput dataInterface;
 	
     
@@ -63,9 +62,13 @@ public class AVLDriver extends AbstractSensorModule<AVLConfig> implements IMulti
     
     
     @Override
-    public void init(AVLConfig config) throws SensorHubException
+    public void init() throws SensorHubException
     {
-        super.init(config);
+        super.init();
+        
+        // generate IDs
+        generateUniqueID(SENSOR_UID_PREFIX, config.fleetID);
+        generateXmlID("AVL_", config.fleetID);            
         
         // create foi maps
         this.foiIDs = new LinkedHashSet<String>();
@@ -84,8 +87,6 @@ public class AVLDriver extends AbstractSensorModule<AVLConfig> implements IMulti
         synchronized (sensorDescription)
         {
             super.updateSensorDescription();
-            sensorDescription.setId("AVL-" + config.fleetID);
-            sensorDescription.setUniqueIdentifier(SENSOR_UID_PREFIX + config.fleetID);
             sensorDescription.setDescription("AVL data for " + config.agencyName);
         }
     }

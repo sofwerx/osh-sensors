@@ -26,7 +26,6 @@ import net.opengis.sensorml.v20.ClassifierList;
 import net.opengis.sensorml.v20.PhysicalSystem;
 import net.opengis.sensorml.v20.SpatialFrame;
 import net.opengis.sensorml.v20.Term;
-import org.sensorhub.api.comm.CommConfig;
 import org.sensorhub.api.comm.ICommProvider;
 import org.sensorhub.api.common.SensorHubException;
 import org.sensorhub.api.module.IModuleStateManager;
@@ -68,7 +67,7 @@ public class Bno055Sensor extends AbstractSensorModule<Bno055Config>
     };
     
     
-    ICommProvider<? super CommConfig> commProvider;
+    ICommProvider<?> commProvider;
     DataInputStreamLI dataIn;
     DataOutputStreamLI dataOut;
     Bno055Output dataInterface;
@@ -82,19 +81,13 @@ public class Bno055Sensor extends AbstractSensorModule<Bno055Config>
 
 
     @Override
-    public void init(Bno055Config config) throws SensorHubException
+    public void init() throws SensorHubException
     {
-        super.init(config);
+        super.init();
         
         // generate identifiers: use serial number from config or first characters of local ID
-        String sensorID = config.serialNumber;
-        if (sensorID == null)
-        {
-            int endIndex = Math.min(config.id.length(), 8);
-            sensorID = config.id.substring(0, endIndex);
-        }
-        this.uniqueID = "urn:bosch:bno055:" + sensorID;
-        this.xmlID = "BOSCH_BNO055_" + sensorID.toUpperCase();
+        generateUniqueID("urn:bosch:bno055:", config.serialNumber);
+        generateXmlID("BOSCH_BNO055_", config.serialNumber);
         
         // create main data interface
         dataInterface = new Bno055Output(this);

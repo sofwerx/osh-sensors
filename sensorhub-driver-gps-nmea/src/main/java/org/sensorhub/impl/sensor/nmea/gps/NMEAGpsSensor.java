@@ -19,7 +19,6 @@ import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
-import org.sensorhub.api.comm.CommConfig;
 import org.sensorhub.api.comm.ICommProvider;
 import org.sensorhub.api.common.SensorHubException;
 import org.sensorhub.api.sensor.ISensorDataInterface;
@@ -44,7 +43,7 @@ public class NMEAGpsSensor extends AbstractSensorModule<NMEAGpsConfig>
     public static final String ZDA_MSG = "ZDA";
     public static final String HDT_MSG = "HDT";
     
-    ICommProvider<? super CommConfig> commProvider;
+    ICommProvider<?> commProvider;
     BufferedReader reader;
     volatile boolean started;
     
@@ -57,19 +56,13 @@ public class NMEAGpsSensor extends AbstractSensorModule<NMEAGpsConfig>
     
     
     @Override
-    public void init(NMEAGpsConfig config) throws SensorHubException
+    public void init() throws SensorHubException
     {
-        super.init(config);
+        super.init();
         
         // generate identifiers: use serial number from config or first characters of local ID
-        String sensorID = config.serialNumber;
-        if (sensorID == null)
-        {
-            int endIndex = Math.min(config.id.length(), 8);
-            sensorID = config.id.substring(0, endIndex);
-        } 
-        this.xmlID = "GPS_SENSOR_" + sensorID.toUpperCase();
-        this.uniqueID = "urn:osh:nmea-gps:" + sensorID;
+        generateUniqueID("urn:osh:sensor:nmea-gps:", config.serialNumber);
+        generateXmlID("GPS_SENSOR_", config.serialNumber);
         
         // create outputs depending on selected sentences
         if (config.activeSentences.contains(GLL_MSG) ||
