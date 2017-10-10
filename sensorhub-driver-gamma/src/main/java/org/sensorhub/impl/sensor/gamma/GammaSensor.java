@@ -1,18 +1,17 @@
 package org.sensorhub.impl.sensor.gamma;
 
 import java.io.IOException;
-import net.opengis.sensorml.v20.IdentifierList;
-import net.opengis.sensorml.v20.Term;
 import org.sensorhub.api.comm.ICommProvider;
 import org.sensorhub.api.common.SensorHubException;
+import org.sensorhub.api.sensor.SensorException;
 import org.sensorhub.impl.sensor.AbstractSensorModule;
 import org.sensorhub.impl.sensor.gamma.GammaOutput;
 import org.sensorhub.impl.sensor.gamma.GammaConfig;
-import org.vast.sensorML.SMLFactory;
-import org.vast.swe.SWEHelper;
+import org.vast.sensorML.SMLHelper;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+
 
 public class GammaSensor extends AbstractSensorModule<GammaConfig>
 { 
@@ -31,6 +30,10 @@ public class GammaSensor extends AbstractSensorModule<GammaConfig>
     public void init() throws SensorHubException
     {
         super.init();
+        
+        // generate identifiers
+        generateUniqueID("urn:osh:sensor:gamma:", config.serialNumber);
+        generateXmlID("GAMMA_", config.serialNumber);
         
         // init comm provider
         if (commProvider == null)
@@ -59,13 +62,8 @@ public class GammaSensor extends AbstractSensorModule<GammaConfig>
         }
         catch (IOException e)
         {
-            throw new RuntimeException("Error while initializing communications ", e);
+            throw new SensorException("Error while initializing communications ", e);
         }
-        
-        
-        // add unique ID based on serial number
-        this.uniqueID = "urn:gamma:" + config.modelNumber + ":" + config.serialNumber;
-        this.xmlID = "GAMMA_" + config.modelNumber + "_" + config.serialNumber.toUpperCase();
         
         // create data interfaces
         gammaOut = new GammaOutput(this);
@@ -83,53 +81,17 @@ public class GammaSensor extends AbstractSensorModule<GammaConfig>
         {
         	super.updateSensorDescription();
         	
-        	// set identifiers in SensorML
-            SMLFactory smlFac = new SMLFactory();
-            sensorDescription.setId("GAMMA_DETECTOR");
-            sensorDescription.setDescription("Gamma Detector Module");
+        	if (!sensorDescription.isSetDescription())
+                sensorDescription.setDescription("Gamma Detector Module");
                 
-          
-            IdentifierList identifierList = smlFac.newIdentifierList();
-            sensorDescription.addIdentification(identifierList);
-            Term term;
-            
-            term = smlFac.newTerm();
-            term.setDefinition(SWEHelper.getPropertyUri("Manufacturer"));
-            term.setLabel("Manufacturer Name");
-            term.setValue("Health Physics Intruments");
-            identifierList.addIdentifier2(term);
-            
+            // set identifiers in SensorML
+            SMLHelper helper = new SMLHelper(sensorDescription);
+            helper.addShortName("Gamma Detector" + (config.serialNumber != null ? " " + config.serialNumber : ""));
+            helper.addManufacturerName("Health Physics Intruments");
             if (config.modelNumber != null)
-            {
-                term = smlFac.newTerm();
-                term.setDefinition(SWEHelper.getPropertyUri("ModelNumber"));
-                term.setLabel("Model Number");
-                term.setValue(config.modelNumber);
-                identifierList.addIdentifier2(term);
-            }
-            
+                helper.addShortName("Gamma Detector Model " + config.modelNumber);
             if (config.serialNumber != null)
-            {
-                term = smlFac.newTerm();
-                term.setDefinition(SWEHelper.getPropertyUri("SerialNumber"));
-                term.setLabel("Serial Number");
-                term.setValue(config.serialNumber);
-                identifierList.addIdentifier2(term);
-            }
-            
-            // Long Name
-            term = smlFac.newTerm();
-            term.setDefinition(SWEHelper.getPropertyUri("LongName"));
-            term.setLabel("Long Name");
-            term.setValue("Model " + config.modelNumber + " Gamma Detector #" + config.serialNumber);
-            identifierList.addIdentifier2(term);
-
-            // Short Name
-            term = smlFac.newTerm();
-            term.setDefinition(SWEHelper.getPropertyUri("ShortName"));
-            term.setLabel("Short Name");
-            term.setValue("Gamma Detector Model " + config.modelNumber);
-            identifierList.addIdentifier2(term);
+                helper.addSerialNumber(config.serialNumber);
         }
     }
 

@@ -8,11 +8,11 @@ import org.sensorhub.api.sensor.SensorConfig;
 public class GammaConfig extends SensorConfig
 {
 	@Required
-    @DisplayInfo(desc="Sensor serial number (used as suffix to generate unique identifier URI)")
+    @DisplayInfo(desc="Sensor serial number")
     public String serialNumber = "701149";
 	
 	@Required
-    @DisplayInfo(desc="Sensor model number (used as suffix to generate unique identifier URI)")
+    @DisplayInfo(desc="Sensor model number")
     public String modelNumber = "2070";
 	
 	

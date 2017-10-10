@@ -15,12 +15,10 @@ Developer are Copyright (C) 2014 the Initial Developer. All Rights Reserved.
 
 package org.sensorhub.impl.sensor.waterdata;
 
-import net.opengis.sensorml.v20.IdentifierList;
-import net.opengis.sensorml.v20.Term;
 import org.sensorhub.impl.module.RobustConnection;
 import org.sensorhub.impl.sensor.AbstractSensorModule;
 import org.sensorhub.api.common.SensorHubException;
-import org.vast.sensorML.SMLFactory;
+import org.vast.sensorML.SMLHelper;
 import org.vast.swe.SWEHelper;
 
 
@@ -39,8 +37,6 @@ public class WaterDataDriver extends AbstractSensorModule <WaterDataConfig> {
     WaterDataOutput waterOut;
     
     String jsonURL;
-    String serialNumber;
-    String modelNumber;
     String longName;
     String shortName;
     
@@ -59,14 +55,13 @@ public class WaterDataDriver extends AbstractSensorModule <WaterDataConfig> {
         // reset internal state in case init() was already called
         super.init();
         
-        // init main data interface
-        waterOut = new WaterDataOutput(this);
-        addOutput(waterOut, false);
-
         // generate identifiers
         generateUniqueID("urn:usgs:water:", config.siteCode);
         generateXmlID("USGS_WATER_DATA_", config.siteCode);
         
+        // init main data interface
+        waterOut = new WaterDataOutput(this);
+        addOutput(waterOut, false);        
         jsonURL = config.getUrlBase() + "&sites=" + config.getSiteCode() + "&parameterCd=00060,00065";
         waterOut.init();
     }
@@ -85,52 +80,13 @@ public class WaterDataDriver extends AbstractSensorModule <WaterDataConfig> {
             // and then sets unique ID, outputs and control inputs
             super.updateSensorDescription();
 
-            SMLFactory smlFac = new SMLFactory();
-
             if (!sensorDescription.isSetDescription())
-                sensorDescription.setDescription("USGS Water Data");
+                sensorDescription.setDescription("USGS Water Station");
 
-            IdentifierList identifierList = smlFac.newIdentifierList();
-            sensorDescription.addIdentification(identifierList);
-
-            Term term;
-            term = smlFac.newTerm();
-            term.setDefinition(SWEHelper.getPropertyUri("Manufacturer"));
-            term.setLabel("Manufacturer Name");
-            term.setValue("USGS");
-            identifierList.addIdentifier2(term);
-
-            if (modelNumber != null) {
-                term = smlFac.newTerm();
-                term.setDefinition(SWEHelper.getPropertyUri("ModelNumber"));
-                term.setLabel("Model Number");
-                term.setValue(modelNumber);
-                identifierList.addIdentifier2(term);
-            }
-
-            if (serialNumber != null) {
-                term = smlFac.newTerm();
-                term.setDefinition(SWEHelper.getPropertyUri("SerialNumber"));
-                term.setLabel("Serial Number");
-                term.setValue(serialNumber);
-                identifierList.addIdentifier2(term);
-            }
-
-            if (longName != null) {
-                term = smlFac.newTerm();
-                term.setDefinition(SWEHelper.getPropertyUri("LongName"));
-                term.setLabel("Long Name");
-                term.setValue(longName);
-                identifierList.addIdentifier2(term);
-            }
-
-            if (shortName != null) {
-                term = smlFac.newTerm();
-                term.setDefinition(SWEHelper.getPropertyUri("ShortName"));
-                term.setLabel("Short Name");
-                term.setValue(shortName);
-                identifierList.addIdentifier2(term);
-            }
+            // add identifiers
+            SMLHelper helper = new SMLHelper(sensorDescription);
+            helper.addShortName("USGS Site " + config.siteName);
+            helper.addIdentifier("Site Code", SWEHelper.getPropertyUri("SiteCode"), config.siteCode);
         }
     }
 

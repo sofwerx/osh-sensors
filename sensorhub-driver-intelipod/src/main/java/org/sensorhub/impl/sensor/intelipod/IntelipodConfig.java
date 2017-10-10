@@ -25,7 +25,12 @@ public class IntelipodConfig extends SensorConfig
 {
     
     @Required
+    @DisplayInfo(desc="Sensor serial number")
     public String serialNumber = "0001";
+    
+    @Required
+    @DisplayInfo(desc="Sensor model number")
+    public String modelNumber = "2070";
     
     
     @DisplayInfo(label="Communication Settings", desc="Settings for selected communication port")

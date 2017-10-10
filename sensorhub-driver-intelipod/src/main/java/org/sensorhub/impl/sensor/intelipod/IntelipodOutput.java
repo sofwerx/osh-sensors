@@ -16,24 +16,17 @@ Developer are Copyright (C) 2014 the Initial Developer. All Rights Reserved.
 package org.sensorhub.impl.sensor.intelipod;
 
 import org.sensorhub.impl.sensor.AbstractSensorOutput;
-import org.sensorhub.api.comm.ICommProvider;
 import org.sensorhub.api.sensor.SensorDataEvent;
 import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStreamReader;
 import java.text.DateFormat;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.time.LocalDateTime;
 import java.util.Date;
 import java.util.TimeZone;
-
 import net.opengis.swe.v20.DataBlock;
 import net.opengis.swe.v20.DataComponent;
 import net.opengis.swe.v20.DataEncoding;
-import net.opengis.swe.v20.Quantity;
-import net.opengis.gml.v32.AbstractFeature;
-
 import org.vast.swe.SWEConstants;
 import org.vast.swe.SWEHelper;
 import org.vast.swe.helper.GeoPosHelper;

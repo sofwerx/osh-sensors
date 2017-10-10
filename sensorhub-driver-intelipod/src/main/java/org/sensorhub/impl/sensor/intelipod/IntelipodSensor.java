@@ -20,17 +20,13 @@ import java.io.BufferedWriter;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
-import net.opengis.sensorml.v20.IdentifierList;
-import net.opengis.sensorml.v20.Term;
-
 import org.sensorhub.api.comm.ICommProvider;
 import org.sensorhub.api.common.SensorHubException;
+import org.sensorhub.api.sensor.SensorException;
 import org.sensorhub.impl.sensor.AbstractSensorModule;
 import org.sensorhub.impl.sensor.intelipod.IntelipodOutput;
 import org.sensorhub.impl.sensor.intelipod.IntelipodConfig;
-import org.vast.sensorML.SMLFactory;
-import org.vast.swe.SWEHelper;
-import ch.qos.logback.core.Context;
+import org.vast.sensorML.SMLHelper;
 
 
 /**
@@ -46,8 +42,6 @@ import ch.qos.logback.core.Context;
  */
 public class IntelipodSensor extends AbstractSensorModule<IntelipodConfig>
 {
-    //static final Logger log = LoggerFactory.getLogger(IntelipodSensor.class);
-    
     ICommProvider<?> commProvider;
     IntelipodOutput intelipodOut;
     BufferedReader dataIn;
@@ -56,25 +50,17 @@ public class IntelipodSensor extends AbstractSensorModule<IntelipodConfig>
     BufferedReader input;
     OutputStream output;
     String inputLine = null;
-    String modelNumber = null;
-    String serialNumber = null;
     boolean started = false;
-    
-    
-    public IntelipodSensor()
-    {        
-    }
     
     
     @Override
     public void init() throws SensorHubException
     {
-    	//System.out.println("Initializing...");
-        super.init();
+    	super.init();
         
-        // init main data interface
-        intelipodOut = new IntelipodOutput(this);
-        addOutput(intelipodOut, false);
+    	// generate identifiers: use serial number from config or first characters of local ID
+        generateUniqueID("urn:venti:intelipod:", config.serialNumber);
+        generateXmlID("INTELIPOD_", config.serialNumber);
         
         // init comm provider
         if (commProvider == null)
@@ -95,14 +81,13 @@ public class IntelipodSensor extends AbstractSensorModule<IntelipodConfig>
             }
             catch (IOException e)
             {
-                throw new RuntimeException("Error while initializing communications ", e);
+                throw new SensorException("Error while initializing communications ", e);
             }
         }
 
-        // generate identifiers: use serial number from config or first characters of local ID
-        generateUniqueID("urn:osh:intelipod:", config.serialNumber);
-        generateXmlID("INTELIPOD_", config.serialNumber);
-        
+        // init main data interface
+        intelipodOut = new IntelipodOutput(this);
+        addOutput(intelipodOut, false);
         intelipodOut.init();
     }
 
@@ -112,64 +97,23 @@ public class IntelipodSensor extends AbstractSensorModule<IntelipodConfig>
     {
         synchronized (sensorDescLock)
         {
-        	System.out.println("Updating Sensor Description...");
-        	// set identifiers in SensorML
-            SMLFactory smlFac = new SMLFactory();            
-
-            if (!sensorDescription.isSetDescription())
+        	if (!sensorDescription.isSetDescription())
                 sensorDescription.setDescription("Venti Intelipod Sensor");
           
-            IdentifierList identifierList = smlFac.newIdentifierList();
-            sensorDescription.addIdentification(identifierList);
-
-            Term term;            
-            term = smlFac.newTerm();
-            term.setDefinition(SWEHelper.getPropertyUri("Manufacturer"));
-            term.setLabel("Manufacturer Name");
-            term.setValue("Venti");
-            identifierList.addIdentifier2(term);
-            
-            if (modelNumber != null)
-            {
-                term = smlFac.newTerm();
-                term.setDefinition(SWEHelper.getPropertyUri("ModelNumber"));
-                term.setLabel("Model Number");
-                term.setValue(modelNumber);
-                identifierList.addIdentifier2(term);
-            }
-            
-            if (serialNumber != null)
-            {
-                term = smlFac.newTerm();
-                term.setDefinition(SWEHelper.getPropertyUri("SerialNumber"));
-                term.setLabel("Serial Number");
-                term.setValue(serialNumber);
-                identifierList.addIdentifier2(term);
-            }
-            
-            // Long Name
-            term = smlFac.newTerm();
-            term.setDefinition(SWEHelper.getPropertyUri("LongName"));
-            term.setLabel("Long Name");
-            term.setValue("Intelipod " + modelNumber + " #" + serialNumber);
-            identifierList.addIdentifier2(term);
-
-            // Short Name
-            term = smlFac.newTerm();
-            term.setDefinition(SWEHelper.getPropertyUri("ShortName"));
-            term.setLabel("Short Name");
-            term.setValue("Intelipod " + modelNumber);
-            identifierList.addIdentifier2(term);
+        	SMLHelper helper = new SMLHelper(sensorDescription);
+        	helper.addShortName("Intellipod" + (config.serialNumber != null ? " " + config.serialNumber : ""));
+        	helper.addManufacturerName("Venti");
+            if (config.modelNumber != null)
+        	    helper.addModelNumber(config.modelNumber);
+        	if (config.serialNumber != null)
+                helper.addSerialNumber(config.serialNumber);
         }
-        System.out.println("Done Updating Sensor Description");
     }
     
     
     @Override
     public void start() throws SensorHubException
     {
-    	//System.out.println("Starting...");
-
     	// start main measurement thread
         Thread t = new Thread(new Runnable()
         {
@@ -220,7 +164,6 @@ public class IntelipodSensor extends AbstractSensorModule<IntelipodConfig>
     	try
     	{
             inputLine = dataIn.readLine();
-            //System.out.println("Message: " + inputLine);
             intelipodOut.postMeasurement(inputLine);
 		}
     	catch (Exception e)
